@@ -2,7 +2,7 @@ package io.keepcoding.spark.exercise.streaming
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Distinct
 import org.apache.spark.sql.types.{StructField, _}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.functions._
 
 import scala.concurrent.Future
@@ -71,17 +71,28 @@ object ByteStreamingJob  extends StreamingJob {
   }
 
   override def computeDevicesCountByCoordinates(dataFrame: DataFrame): DataFrame = {
-    dataFrame
-      .select($"timestamp", $"antenna_id", $"bytes")
-      .withWatermark("timestamp", "10 seconds")
-      .groupBy($"antenna_id", window($"timestamp", " 30 seconds"))
-      .agg( approx_count_distinct($"antenna_id").as("id"),
+      dataFrame
+        .select($"timestamp", $"antenna_id", $"bytes")
+        .withWatermark("timestamp","10 seconds")
+        .groupBy($"antenna_id", window($"timestamp", "30 seconds"))
+        .agg(
         sum($"bytes").as("value")
-      )
-      .select($"window.start".as("date"), $"id", $"value")
+        )
+        .select($"window.start".as("date"), $"antenna_id".as("id"),$"value")
+        .withColumn("type", lit("antenna_bytes"))
+
 
 
   }
+
+
+  /*
+    .agg( approx_count_distinct($"antenna_id").as("id"),
+      sum($"bytes").as("value")
+    )
+    .select($"window.start".as("date"), $"id", $"value")
+
+   */
 
   override def writeToJdbc(dataFrame: DataFrame, jdbcURI: String, jdbcTable: String, user: String, password: String): Future[Unit] = ???
 
@@ -102,9 +113,12 @@ object ByteStreamingJob  extends StreamingJob {
 
 
     val enrichDF = enrichAntennaWithMetadata(parseDF, metadataDF)
-    val countByAntenna = computeDevicesCountByCoordinates(enrichDF)
 
-    countByAntenna
+   val selectDelaTabla = computeDevicesCountByCoordinates(enrichDF)
+
+
+
+    selectDelaTabla
       .writeStream
       .format("console")
       .start()
