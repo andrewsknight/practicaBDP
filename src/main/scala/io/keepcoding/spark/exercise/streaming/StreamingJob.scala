@@ -37,9 +37,9 @@ trait StreamingJob {
     val antennaMetadataDF = enrichAntennaWithMetadata(antennaDF, metadataDF)
     val storageFuture = writeToStorage(antennaDF, storagePath)
     val bytesByAntenna = computeBytesByAntenna(antennaMetadataDF)
-    val aggFuture = writeToJdbc(bytesByAntenna, jdbcUri, aggJdbcTable, jdbcUser, jdbcPassword)
+    val jdbcFutureBytesByAntenna = writeToJdbc(bytesByAntenna, jdbcUri, aggJdbcTable, jdbcUser, jdbcPassword)
 
-    Await.result(Future.sequence(Seq(aggFuture, storageFuture)), Duration.Inf)
+    Await.result(Future.sequence(Seq(jdbcFutureBytesByAntenna, storageFuture)), Duration.Inf)
 
     spark.close()
   }

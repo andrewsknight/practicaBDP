@@ -149,7 +149,7 @@ object ByteStreamingJob extends StreamingJob {
     val enrichDF = enrichAntennaWithMetadata(parsedDF, metadataDF)
 
     val bytesByAntenna = computeBytesByAntenna(enrichDF)
-//    val jdbcFuture = writeToJdbc(bytesByAntenna, jdbcURI, countByAntennaTable, jdbcUser, jdbcPassword)
+    val jdbcFutureBytesByAntenna = writeToJdbc(bytesByAntenna, jdbcURI, countByAntennaTable, jdbcUser, jdbcPassword)
 
 
         bytesByAntenna
@@ -159,7 +159,7 @@ object ByteStreamingJob extends StreamingJob {
           .awaitTermination()
 
     Await.result(
-      Future.sequence(Seq(storageFuture/*, jdbcFuture*/)), Duration.Inf
+      Future.sequence(Seq(storageFuture, jdbcFutureBytesByAntenna)), Duration.Inf
     )
 
     spark.close()
