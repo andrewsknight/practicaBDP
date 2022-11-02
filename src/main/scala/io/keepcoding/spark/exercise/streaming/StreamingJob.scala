@@ -17,11 +17,11 @@ trait StreamingJob {
 
   def parserJsonData(dataFrame: DataFrame): DataFrame
 
-  def readAntennaMetadata(jdbcURI: String, jdbcTable: String, user: String, password: String): DataFrame
+  def readUserMetadata(jdbcURI: String, jdbcTable: String, user: String, password: String): DataFrame
 
   def enrichAntennaWithMetadata(antennaDF: DataFrame, metadataDF: DataFrame): DataFrame
 
-  def computeDevicesCountByCoordinates(dataFrame: DataFrame): DataFrame
+  def computeBytesByAntenna(dataFrame: DataFrame): DataFrame
 
   def writeToJdbc(dataFrame: DataFrame, jdbcURI: String, jdbcTable: String, user: String, password: String): Future[Unit]
 
@@ -33,11 +33,11 @@ trait StreamingJob {
 
     val kafkaDF = readFromKafka(kafkaServer, topic)
     val antennaDF = parserJsonData(kafkaDF)
-    val metadataDF = readAntennaMetadata(jdbcUri, jdbcMetadataTable, jdbcUser, jdbcPassword)
+    val metadataDF = readUserMetadata(jdbcUri, jdbcMetadataTable, jdbcUser, jdbcPassword)
     val antennaMetadataDF = enrichAntennaWithMetadata(antennaDF, metadataDF)
     val storageFuture = writeToStorage(antennaDF, storagePath)
-    val aggByCoordinatesDF = computeDevicesCountByCoordinates(antennaMetadataDF)
-    val aggFuture = writeToJdbc(aggByCoordinatesDF, jdbcUri, aggJdbcTable, jdbcUser, jdbcPassword)
+    val bytesByAntenna = computeBytesByAntenna(antennaMetadataDF)
+    val aggFuture = writeToJdbc(bytesByAntenna, jdbcUri, aggJdbcTable, jdbcUser, jdbcPassword)
 
     Await.result(Future.sequence(Seq(aggFuture, storageFuture)), Duration.Inf)
 
