@@ -5,47 +5,42 @@ import java.time.OffsetDateTime
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
-
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 case class AntennaMessage(year: Int, month: Int, day: Int, hour: Int, timestamp: Timestamp, id: String, metric: String, value: Long)
 
 trait BatchJob {
 
   val spark: SparkSession
-
-  def readFromStorage(storagePath: String, filterDate: OffsetDateTime): DataFrame
-
-  def readAntennaMetadata(jdbcURI: String, jdbcTable: String, user: String, password: String): DataFrame
-
-  def enrichAntennaWithMetadata(antennaDF: DataFrame, metadataDF: DataFrame): DataFrame
-
-  def computeDevicesCountByCoordinates(dataFrame: DataFrame): DataFrame
-
-  def computeErrorAntennaByModelAndVersion(dataFrame: DataFrame): DataFrame
-
-  def computePercentStatusByID(dataFrame: DataFrame): DataFrame
-
+  def readFromStorage(storageRootPath: String, offsetDate: OffsetDateTime): DataFrame
+  def readUserMetadata(jdbcURI: String, jdbcTable: String, user: String, password: String): DataFrame
+  def calculateUserQuotaLimit(userTotalBytesDF: DataFrame, userMetadataDF: DataFrame): DataFrame
+  def computeBytesByDate(dataFrame: DataFrame, key: String, literal: String, offsetDate: OffsetDateTime): DataFrame
   def writeToJdbc(dataFrame: DataFrame, jdbcURI: String, jdbcTable: String, user: String, password: String): Unit
-
   def writeToStorage(dataFrame: DataFrame, storageRootPath: String): Unit
 
   def run(args: Array[String]): Unit = {
-    val Array(filterDate, storagePath, jdbcUri, jdbcMetadataTable, aggJdbcTable, aggJdbcErrorTable, aggJdbcPercentTable, jdbcUser, jdbcPassword) = args
+    val Array(offsetDateTime, storageRootPath, jdbcUri, jdbcMetadataTable, jdbcUser, jdbcPassword, literal,hourly_table,quota_table) = args
     println(s"Running with: ${args.toSeq}")
 
-    val antennaDF = readFromStorage(storagePath, OffsetDateTime.parse(filterDate))
-    val metadataDF = readAntennaMetadata(jdbcUri, jdbcMetadataTable, jdbcUser, jdbcPassword)
-    val antennaMetadataDF = enrichAntennaWithMetadata(antennaDF, metadataDF).cache()
-    val aggByCoordinatesDF = computeDevicesCountByCoordinates(antennaMetadataDF)
-    val aggPercentStatusDF = computePercentStatusByID(antennaMetadataDF)
-    val aggErroAntennaDF = computeErrorAntennaByModelAndVersion(antennaMetadataDF)
+    val key: String = ???
 
-    writeToJdbc(aggByCoordinatesDF, jdbcUri, aggJdbcTable, jdbcUser, jdbcPassword)
-    writeToJdbc(aggPercentStatusDF, jdbcUri, aggJdbcPercentTable, jdbcUser, jdbcPassword)
-    writeToJdbc(aggErroAntennaDF, jdbcUri, aggJdbcErrorTable, jdbcUser, jdbcPassword)
+    val antennaDF = readFromStorage(storageRootPath, OffsetDateTime.parse(offsetDateTime))
+    val userMetadataDF = readUserMetadata(jdbcUri, jdbcMetadataTable, jdbcUser, jdbcPassword)
 
-    writeToStorage(antennaDF, storagePath)
+    val userTotalBytesDF = computeBytesByDate(antennaDF,  key,  literal,  OffsetDateTime.parse(offsetDateTime)).cache()
+
+    val antennaTotalBytesDF = computeBytesByDate(antennaDF,  key,  literal,  OffsetDateTime.parse(offsetDateTime))
+    val appTotalBytesDF = computeBytesByDate(antennaDF,  key,  literal, OffsetDateTime.parse( offsetDateTime))
+
+    val userQuotaLimit = calculateUserQuotaLimit(userTotalBytesDF,userMetadataDF)
+
+    writeToJdbc(userTotalBytesDF, jdbcUri, hourly_table, jdbcUser, jdbcPassword)
+    writeToJdbc(antennaTotalBytesDF, jdbcUri, hourly_table,jdbcUser, jdbcPassword)
+    writeToJdbc(appTotalBytesDF, jdbcUri, hourly_table,jdbcUser, jdbcPassword)
+    writeToJdbc(userQuotaLimit, jdbcUri, quota_table, jdbcUser, jdbcPassword)
+
+    writeToStorage(antennaDF, storageRootPath)
 
     spark.close()
   }
